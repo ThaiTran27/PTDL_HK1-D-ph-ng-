@@ -1,0 +1,64 @@
+version: "3.8"
+
+services:
+  mymongodb:
+    image: mongo
+    container_name: mymongodb
+    ports:
+      - "27017:27017"
+    networks:
+      - mynetwork
+    restart: always
+
+  mycrawlerapp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: imagecrawler
+    container_name: mycrawlerapp
+    networks:
+      - mynetwork
+    environment:
+      - Mongo_HOST=mymongodb
+    depends_on:
+      - mymongodb
+      - mypostgres
+
+  myspark:
+    image: apache/spark
+    container_name: myspark
+    environment:
+      - SPARK_MODE=master
+    depends_on:
+      - mycrawlerapp
+      - mypostgres
+    ports:
+      - "7077:7077"
+      - "8080:8080"
+    networks:
+      - mynetwork
+    # depends_on:
+    #   - mycrawlerapp
+    volumes:
+      - ./work-dir:/work-dir
+      - ./jars:/jars
+    # command: >
+    #   /bin/bash -c "cd /opt/spark && ./bin/spark-submit --packages org.mongodb.spark:mongo-spark-connector_2.12:3.0.1 --jars /jars/postgresql-42.7.4.jar --conf 'spark.jars.ivy=/tmp/spark-ivy2' /work-dir/mongo_spark_postgre.py"
+    command: >
+      /bin/bash -c "while true; do cd /opt/spark && ./bin/spark-submit --packages org.mongodb.spark:mongo-spark-connector_2.12:3.0.1 --jars /jars/postgresql-42.7.4.jar --conf 'spark.jars.ivy=/tmp/spark-ivy2' /work-dir/mongo_spark_postgre.py; sleep 30; done"
+  mypostgres:
+    image: postgres
+    container_name: mypostgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: database
+    ports:
+      - "5432:5432"
+    networks:
+      - mynetwork
+    restart: always
+
+networks:
+  mynetwork:
+    driver: bridge
